@@ -8,7 +8,19 @@ import (
 	"os"
 	"strings"
 	"sync"
+
+	"github.com/slack-go/slack"
 )
+
+type Config struct {
+	Slack     SlackConfig       `json:"slack"`
+	Endpoints map[string]string `json:"endpoints"`
+}
+
+type SlackConfig struct {
+	Channel string `json:"channel"`
+	Token   string `json:"token"`
+}
 
 func connected() (ok bool) {
 	_, err := http.Get("http://clients3.google.com/generate_204")
@@ -29,25 +41,25 @@ func isHealthy(url string) (ok bool, err error) {
 	return true, nil
 }
 
-func readEndpoints(path string) (map[string]string, error) {
+func readConfig(path string) (*Config, error) {
 
 	jsonFile, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 
-	var data map[string]string
+	var config Config
 
 	byteValue, err := ioutil.ReadAll(jsonFile)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := json.Unmarshal(byteValue, &data); err != nil {
+	if err := json.Unmarshal(byteValue, &config); err != nil {
 		return nil, err
 	}
 
-	return data, nil
+	return &config, nil
 }
 
 func run() error {
@@ -56,7 +68,7 @@ func run() error {
 		return fmt.Errorf("You are not connected to the internet")
 	}
 
-	endpoints, err := readEndpoints("endpoints_config.json")
+	config, err := readConfig("healthcheck_config.json")
 	if err != nil {
 		return err
 	}
@@ -65,7 +77,7 @@ func run() error {
 
 	var wg sync.WaitGroup
 
-	for name, url := range endpoints {
+	for name, url := range config.Endpoints {
 		wg.Add(1)
 		go func(name string, url string, wg *sync.WaitGroup) {
 			defer wg.Done()
@@ -90,14 +102,39 @@ func run() error {
 			failedArr = append(failedArr, name)
 		}
 
+		var finalErr error
+
 		if len(failedArr) > 0 {
 			failedJoined := strings.Join(failedArr, ", ")
-			fmt.Printf("Failed: %s\n", failedJoined)
+
+			text := fmt.Sprintf("Failed services: %s\n", failedJoined)
+
+			fmt.Println(text)
+
+			if config.Slack.Channel != "" && config.Slack.Token != "" {
+				api := slack.New(config.Slack.Token)
+
+				headerBlock := slack.NewHeaderBlock(slack.NewTextBlockObject("plain_text", "❗ Major healthcheck failure", false, false))
+				textBlock := slack.NewSectionBlock(slack.NewTextBlockObject("mrkdwn", text, false, false), nil, nil)
+
+				textOption := slack.MsgOptionText("❗ Healthcheck failure!", false)
+
+				msgBlocks := slack.MsgOptionBlocks(
+					headerBlock,
+					textBlock,
+				)
+
+				_, _, err := api.PostMessage(config.Slack.Channel, textOption, msgBlocks)
+				if err != nil {
+					finalErr = err
+				}
+			}
+
 		} else {
 			fmt.Println("OK!")
 		}
 
-		errorChan <- nil
+		errorChan <- finalErr
 	}()
 
 	err = <-errorChan

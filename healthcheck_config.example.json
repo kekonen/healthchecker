@@ -1,0 +1,10 @@
+{
+    "slack": {
+        "token": "xxxxxx",
+        "channel": "#my_fail_channel"
+    },
+    "endpoints": {
+        "xxx": "https://google.com/healthcheck",
+        "yyy": "https://yandex.ru/healthcheck"
+    }
+}
