@@ -30,10 +30,25 @@ func connected() (ok bool) {
 	return true
 }
 
-func isHealthy(url string) (ok bool, err error) {
-	response, err := http.Get(url)
+func isHealthy(destUrl string) (ok bool, err error) {
+	response, err := http.Get(destUrl)
 	if err != nil {
-		return false, err
+		return false, nil
+		// _, ok := err.(*net.DNSError)
+		// if ok {
+		// 	fmt.Println("YES")
+		// 	return false, nil
+		// } else {
+		// 	serr, ok := err.(*url.Error)
+		// 	if ok {
+		// 		fmt.Printf("YES2, %T\n", serr.Unwrap())
+		// 		return false, nil
+		// 	} else {
+		// 		fmt.Printf("%T\n", err)
+		// 	}
+
+		// }
+		// return false, err
 	}
 	if response.StatusCode < 200 || response.StatusCode > 204 {
 		return false, nil
